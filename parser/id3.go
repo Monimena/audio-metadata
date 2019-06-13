@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-var UnknownVersion = errors.New("error parsing metadata ID3: unknown version")
+var ErrUnknownVersion = errors.New("error parsing metadata ID3: unknown version")
 
 type ID3Parser struct {
 
@@ -28,23 +28,23 @@ func (p ID3Parser) Parse(file io.Reader) (*metadata.Info, error) {
 	}
 
 	if v2Tag := v2.ParseTag(fSeeker); v2Tag != nil {
-		info =  mapMetadataID3(v2Tag)
+		info =  fromID3Tagger(v2Tag)
 	} else if v1Tag := v1.ParseTag(fSeeker); v1Tag != nil {
-		info = mapMetadataID3(v1Tag)
+		info = fromID3Tagger(v1Tag)
 	} else {
-		return nil, UnknownVersion
+		return nil, ErrUnknownVersion
 	}
 
 	return &info, nil
 }
 
-func mapMetadataID3(tagger id3.Tagger) metadata.Info {
+func fromID3Tagger(tagger id3.Tagger) metadata.Info {
 	return metadata.Info{
 		Title:   tagger.Title(),
 		Artist:  tagger.Artist(),
 		Album:   tagger.Album(),
 		Year:    mapYear(tagger.Year()),
-		Comment: mapComments(tagger.Comments()),
+		Comment: strings.Join(tagger.Comments(), " "), // TODO: check what these comments contain and why are they an array
 		Track:   0, // TODO: test this: The track number is stored in the last two bytes of the comment field. If the comment is 29 or 30 characters long, no track number can be stored.
 		Genre:   tagger.Genre(),
 		Other: map[string]string{
@@ -63,8 +63,4 @@ func mapYear(ystr string) int {
 	}
 
 	return year
-}
-
-func mapComments(comments []string) string {
-	return strings.Join(comments, " ")
 }

@@ -15,36 +15,39 @@ type VorbisParser struct {
 
 func (p VorbisParser) Parse(file io.Reader) (*metadata.Info, error) {
 	comments, err := oggvorbis.GetCommentHeader(file)
-	info := mapMetadataVorbis(comments)
 
 	if err != nil {
 		return nil, err
 	}
 
+	info := fromVorbisHeader(comments)
+
 	return &info, nil
 }
 
-func mapMetadataVorbis(header vorbis.CommentHeader) metadata.Info {
+func fromVorbisHeader(header vorbis.CommentHeader) metadata.Info {
 	info := metadata.Info{}
 
 	for _, comment := range header.Comments {
-		c := strings.Split(comment, "=")
+		if len(comment) > 2 {
+			c := strings.Split(comment, "=")
 
-		switch strings.ToUpper(c[0]) {
-		case "TITLE":
-			info.Title = c[1]
-		case "ALBUM":
-			info.Album = c[1]
-		case "TRACKNUMBER":
-			if t, err := strconv.Atoi(c[1]); err != nil {
-				info.Track = t
+			switch strings.ToUpper(c[0]) {
+			case "TITLE":
+				info.Title = c[1]
+			case "ALBUM":
+				info.Album = c[1]
+			case "TRACKNUMBER":
+				if t, err := strconv.Atoi(c[1]); err != nil {
+					info.Track = t
+				}
+			case "ARTIST":
+				info.Artist = c[1]
+			case "GENRE":
+				info.Genre = c[1]
+			default:
+				info.Other[c[0]] = c[1]
 			}
-		case "ARTIST":
-			info.Artist = c[1]
-		case "GENRE":
-			info.Genre = c[1]
-		default:
-			info.Other[c[0]] = c[1]
 		}
 	}
 
