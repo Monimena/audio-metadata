@@ -12,28 +12,33 @@ import (
 	"strings"
 )
 
-const unknownVersion = "error parsing metadata ID3: unknown version"
+var UnknownVersion = errors.New("error parsing metadata ID3: unknown version")
 
 type ID3Parser struct {
 
 }
 
-func (p ID3Parser) Parse(file io.ReadSeeker) (metadata.Info, error) {
+func (p ID3Parser) Parse(file io.Reader) (*metadata.Info, error) {
 	var info metadata.Info
-	var err error
 
-	if v2Tag := v2.ParseTag(file); v2Tag != nil {
-		info =  mapMetadataInfo(v2Tag)
-	} else if v1Tag := v1.ParseTag(file); v1Tag != nil {
-		info = mapMetadataInfo(v1Tag)
-	} else {
-		err = errors.New(unknownVersion)
+	fSeeker, err := metadata.AsSeeker(file)
+
+	if err != nil {
+		return nil, err
 	}
 
-	return info, err
+	if v2Tag := v2.ParseTag(fSeeker); v2Tag != nil {
+		info =  mapMetadataID3(v2Tag)
+	} else if v1Tag := v1.ParseTag(fSeeker); v1Tag != nil {
+		info = mapMetadataID3(v1Tag)
+	} else {
+		return nil, UnknownVersion
+	}
+
+	return &info, nil
 }
 
-func mapMetadataInfo(tagger id3.Tagger) metadata.Info {
+func mapMetadataID3(tagger id3.Tagger) metadata.Info {
 	return metadata.Info{
 		Title:   tagger.Title(),
 		Artist:  tagger.Artist(),

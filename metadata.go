@@ -6,14 +6,16 @@ import (
 	"github.com/Monimena/audio-metadata/parser"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 )
 
-const unknownContentType = "error parsing metadata: unknown content type"
+var UnknownContentType = errors.New("error parsing metadata: unknown content type")
+
+var id3Parser = parser.ID3Parser{}
+var vorbisParser = parser.VorbisParser{}
 
 type Parser interface {
-	Parse(file io.ReadSeeker) (Info, error)
+	Parse(file io.Reader) (*Info, error)
 }
 
 type Info struct {
@@ -28,44 +30,61 @@ type Info struct {
 }
 
 var parserMap = map[string]Parser{
-	"audio/mpeg": parser.ID3Parser{},
+	"audio/mpeg": &id3Parser,
+	"audio/MPA": &id3Parser,
+	"audio/mpa-robust": &id3Parser,
+	"audio/vnd.wave": &id3Parser,
+	"audio/wav": &id3Parser,
+	"audio/wave": &id3Parser,
+	"audio/x-wav": &id3Parser,
+	"audio/x-aiff": &id3Parser,
+	"audio/aiff": &id3Parser,
+
+	"audio/ogg": &vorbisParser,
+	"audio/opus": &vorbisParser,
+	"audio/flac": &vorbisParser,
+	"audio/vorbis": &vorbisParser,
 }
 
-func Parse(file io.Reader) (Info, error) {
-	var info Info
-	var err error
+func Parse(file io.Reader) (*Info, error) {
+	fSeeker, err := AsSeeker(file)
 
-
-	fSeeker := asSeeker(file)
+	if err != nil {
+		return nil, err
+	}
 
 	b := make([]byte, 512)
 	_, err = fSeeker.Read(b)
-	fSeeker.Seek(0, io.SeekStart) // reset
 
 	if err != nil {
-		return info, err
+		return nil, err
 	}
 
 	contentType := http.DetectContentType(b)
 
-	if parserMap[contentType] == nil {
-		return info, errors.New(unknownContentType)
+	if p, found := parserMap[contentType]; found {
+		return p.Parse(fSeeker)
 	}
 
-	return parserMap[contentType].Parse(fSeeker)
+	return nil, UnknownContentType
 }
 
-func asSeeker(r io.Reader) io.ReadSeeker {
+func AsSeeker(r io.Reader) (io.ReadSeeker, error) {
 	if rs, ok := r.(io.ReadSeeker); ok {
-		rs.Seek(0, io.SeekStart) // reset
-		return rs // r is already a readSeeker under the hood, return it
+		_, err := rs.Seek(0, io.SeekStart) // reset
+
+		if err != nil {
+			return nil, err
+		}
+
+		return rs, nil                  // r is already a readSeeker under the hood, return it
 	}
 
 	b, err := ioutil.ReadAll(r)
 
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	return bytes.NewReader(b)
+	return bytes.NewReader(b), nil
 }
