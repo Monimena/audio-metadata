@@ -3,7 +3,6 @@ package metadata
 import (
 	"bytes"
 	"errors"
-	"github.com/Monimena/audio-metadata/parser"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -11,8 +10,8 @@ import (
 
 var ErrUnknownContentType = errors.New("error parsing metadata: unknown content type")
 
-var id3Parser = parser.ID3Parser{}
-var vorbisParser = parser.VorbisParser{}
+var id3Parser = ID3Parser{}
+var vorbisParser = VorbisParser{}
 
 type Parser interface {
 	Parse(file io.Reader) (*Info, error)
@@ -47,7 +46,7 @@ var parserMap = map[string]Parser{
 }
 
 func Parse(file io.Reader) (*Info, error) {
-	fSeeker, err := AsSeeker(file)
+	fSeeker, err := asSeeker(file)
 
 	if err != nil {
 		return nil, err
@@ -69,7 +68,7 @@ func Parse(file io.Reader) (*Info, error) {
 	return nil, ErrUnknownContentType
 }
 
-func AsSeeker(r io.Reader) (io.ReadSeeker, error) {
+func asSeeker(r io.Reader) (io.ReadSeeker, error) {
 	if rs, ok := r.(io.ReadSeeker); ok {
 		_, err := rs.Seek(0, io.SeekStart) // reset
 

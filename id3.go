@@ -1,9 +1,8 @@
-package parser
+package metadata
 
 import (
 	"errors"
 	"fmt"
-	"github.com/Monimena/audio-metadata"
 	"github.com/mikkyang/id3-go"
 	"github.com/mikkyang/id3-go/v1"
 	"github.com/mikkyang/id3-go/v2"
@@ -18,10 +17,10 @@ type ID3Parser struct {
 
 }
 
-func (p ID3Parser) Parse(file io.Reader) (*metadata.Info, error) {
-	var info metadata.Info
+func (p ID3Parser) Parse(file io.Reader) (*Info, error) {
+	var info Info
 
-	fSeeker, err := metadata.AsSeeker(file)
+	fSeeker, err := asSeeker(file)
 
 	if err != nil {
 		return nil, err
@@ -38,8 +37,8 @@ func (p ID3Parser) Parse(file io.Reader) (*metadata.Info, error) {
 	return &info, nil
 }
 
-func fromID3Tagger(tagger id3.Tagger) metadata.Info {
-	return metadata.Info{
+func fromID3Tagger(tagger id3.Tagger) Info {
+	return Info{
 		Title:   tagger.Title(),
 		Artist:  tagger.Artist(),
 		Album:   tagger.Album(),
@@ -47,11 +46,7 @@ func fromID3Tagger(tagger id3.Tagger) metadata.Info {
 		Comment: strings.Join(tagger.Comments(), " "), // TODO: check what these comments contain and why are they an array
 		Track:   0, // TODO: test this: The track number is stored in the last two bytes of the comment field. If the comment is 29 or 30 characters long, no track number can be stored.
 		Genre:   tagger.Genre(),
-		Other: map[string]string{
-			"version": tagger.Version(),
-			"size": fmt.Sprintf("%d", tagger.Size()),
-			// TODO: add more fields? v2 frames
-		},
+		Other: mapOther(tagger),
 	}
 }
 
@@ -63,4 +58,19 @@ func mapYear(ystr string) int {
 	}
 
 	return year
+}
+
+func mapOther(tagger id3.Tagger) map[string]string {
+	// TODO: add more fields? v2 frames
+	var other = map[string]string{}
+
+	if len(tagger.Version()) > 0 {
+		other["version"] = tagger.Version()
+	}
+
+	if tagger.Size() > 0 {
+		other["size"] = fmt.Sprintf("%d", tagger.Size())
+	}
+
+	return other
 }
