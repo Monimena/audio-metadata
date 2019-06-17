@@ -11,13 +11,9 @@ import (
 	"strings"
 )
 
-var ErrUnknownVersion = errors.New("error parsing metadata ID3: unknown version")
+var ErrUnknownVersion = errors.New("error parsing metadata ID3: unknown version\n")
 
-type ID3Parser struct {
-
-}
-
-func (p ID3Parser) Parse(file io.Reader) (*Info, error) {
+func ParseID3(file io.Reader) (*Info, error) {
 	var info Info
 
 	fSeeker, err := asSeeker(file)
@@ -26,8 +22,10 @@ func (p ID3Parser) Parse(file io.Reader) (*Info, error) {
 		return nil, err
 	}
 
+	// TODO: add tracknumber from frames for v2 and from comments for v1
+
 	if v2Tag := v2.ParseTag(fSeeker); v2Tag != nil {
-		info =  fromID3Tagger(v2Tag)
+		info = fromID3Tagger(v2Tag)
 	} else if v1Tag := v1.ParseTag(fSeeker); v1Tag != nil {
 		info = fromID3Tagger(v1Tag)
 	} else {
@@ -38,15 +36,20 @@ func (p ID3Parser) Parse(file io.Reader) (*Info, error) {
 }
 
 func fromID3Tagger(tagger id3.Tagger) Info {
+	fmt.Printf("comment length: %d\n", len(tagger.Comments()[0]))
+
+	b := []byte(tagger.Comments()[0])
+	fmt.Printf("comments: %v", b)
+
 	return Info{
 		Title:   tagger.Title(),
 		Artist:  tagger.Artist(),
 		Album:   tagger.Album(),
 		Year:    mapYear(tagger.Year()),
-		Comment: strings.Join(tagger.Comments(), " "), // TODO: check what these comments contain and why are they an array
-		Track:   0, // TODO: test this: The track number is stored in the last two bytes of the comment field. If the comment is 29 or 30 characters long, no track number can be stored.
+		Comment: strings.Join(tagger.Comments(), ""), // TODO: check what these comments contain and why are they an array
+		Track:   0,                                    // TODO: test this: The track number is stored in the last two bytes of the comment field. If the comment is 29 or 30 characters long, no track number can be stored.
 		Genre:   tagger.Genre(),
-		Other: mapOther(tagger),
+		Other:   mapOther(tagger),
 	}
 }
 

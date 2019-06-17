@@ -8,11 +8,7 @@ import (
 	"strings"
 )
 
-type VorbisParser struct {
-
-}
-
-func (p VorbisParser) Parse(file io.Reader) (*Info, error) {
+func ParseVorbis(file io.Reader) (*Info, error) {
 	comments, err := oggvorbis.GetCommentHeader(file)
 
 	if err != nil {

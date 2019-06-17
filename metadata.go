@@ -3,18 +3,22 @@ package metadata
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 )
 
-var ErrUnknownContentType = errors.New("error parsing metadata: unknown content type")
-
-var id3Parser = ID3Parser{}
-var vorbisParser = VorbisParser{}
+var ErrUnknownContentType = errors.New("error parsing metadata: unknown content type\n")
 
 type Parser interface {
 	Parse(file io.Reader) (*Info, error)
+}
+
+type ParserFunc func(file io.Reader) (*Info, error)
+
+func (pf ParserFunc) Parse(file io.Reader) (*Info, error) {
+	return pf(file)
 }
 
 type Info struct {
@@ -28,24 +32,39 @@ type Info struct {
 	Other   map[string]string
 }
 
-var parserMap = map[string]Parser{
-	"audio/mpeg": &id3Parser,
-	"audio/MPA": &id3Parser,
-	"audio/mpa-robust": &id3Parser,
-	"audio/vnd.wave": &id3Parser,
-	"audio/wav": &id3Parser,
-	"audio/wave": &id3Parser,
-	"audio/x-wav": &id3Parser,
-	"audio/x-aiff": &id3Parser,
-	"audio/aiff": &id3Parser,
-
-	"audio/ogg": &vorbisParser,
-	"audio/opus": &vorbisParser,
-	"audio/flac": &vorbisParser,
-	"audio/vorbis": &vorbisParser,
+type MIMEParser struct {
+	parserMap map[string]Parser
 }
 
-func Parse(file io.Reader) (*Info, error) {
+type FallbackParser struct {
+	parsers []Parser
+} // TODO: add parse method that tries to parse with every parser else returns error
+// TODO: add append method
+
+var defaultMIMEParser = MIMEParser{
+	parserMap: map[string]Parser{
+		"audio/mpeg":       ParserFunc(ParseID3),
+		"audio/MPA":        ParserFunc(ParseID3),
+		"audio/mpa-robust": ParserFunc(ParseID3),
+		"audio/vnd.wave":   ParserFunc(ParseID3),
+		"audio/wav":        ParserFunc(ParseID3),
+		"audio/wave":       ParserFunc(ParseID3),
+		"audio/x-wav":      ParserFunc(ParseID3),
+		"audio/x-aiff":     ParserFunc(ParseID3),
+		"audio/aiff":       ParserFunc(ParseID3),
+
+		"audio/ogg":    ParserFunc(ParseVorbis),
+		"audio/opus":   ParserFunc(ParseVorbis),
+		"audio/flac":   ParserFunc(ParseVorbis),
+		"audio/vorbis": ParserFunc(ParseVorbis),
+	},
+}
+
+var fallbackParser = FallbackParser{
+	parsers: []Parser{&defaultMIMEParser, ParserFunc(ParseID3), ParserFunc(ParseVorbis)},
+}
+
+func (mp *MIMEParser) Parse(file io.Reader) (*Info, error) {
 	fSeeker, err := asSeeker(file)
 
 	if err != nil {
@@ -61,11 +80,25 @@ func Parse(file io.Reader) (*Info, error) {
 
 	contentType := http.DetectContentType(b)
 
-	if p, found := parserMap[contentType]; found {
+	fmt.Printf("content type detected: %s\n", contentType)
+
+	if p, found := mp.parserMap[contentType]; found {
 		return p.Parse(fSeeker)
 	}
 
 	return nil, ErrUnknownContentType
+}
+
+func (mp *MIMEParser) Append(s string, p Parser) {
+	if mp.parserMap == nil {
+		mp.parserMap = map[string]Parser{}
+	}
+
+	mp.parserMap[s] = p
+}
+
+func Parse(file io.Reader) (*Info, error) {
+	return defaultMIMEParser.Parse(file)
 }
 
 func asSeeker(r io.Reader) (io.ReadSeeker, error) {
@@ -76,7 +109,7 @@ func asSeeker(r io.Reader) (io.ReadSeeker, error) {
 			return nil, err
 		}
 
-		return rs, nil                  // r is already a readSeeker under the hood, return it
+		return rs, nil // r is already a readSeeker under the hood, return it
 	}
 
 	b, err := ioutil.ReadAll(r)
