@@ -38,8 +38,7 @@ type MIMEParser struct {
 
 type FallbackParser struct {
 	parsers []Parser
-} // TODO: add parse method that tries to parse with every parser else returns error
-// TODO: add append method
+}
 
 var defaultMIMEParser = MIMEParser{
 	parserMap: map[string]Parser{
@@ -97,8 +96,33 @@ func (mp *MIMEParser) Append(s string, p Parser) {
 	mp.parserMap[s] = p
 }
 
+func (fp *FallbackParser) Parse(file io.Reader) (*Info, error) {
+	var info *Info
+	var err error
+
+	file, err = asSeeker(file)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, parser := range fp.parsers {
+		info, err = parser.Parse(file)
+
+		if err == nil {
+			break
+		}
+	}
+
+	return info, err
+}
+
+func (fp *FallbackParser) Append(p Parser) {
+	fp.parsers = append(fp.parsers, p)
+}
+
 func Parse(file io.Reader) (*Info, error) {
-	return defaultMIMEParser.Parse(file)
+	return fallbackParser.Parse(file)
 }
 
 func asSeeker(r io.Reader) (io.ReadSeeker, error) {

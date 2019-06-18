@@ -9,13 +9,19 @@ import (
 )
 
 func ParseVorbis(file io.Reader) (*Info, error) {
-	comments, err := oggvorbis.GetCommentHeader(file)
+	file, err := asSeeker(file)
 
 	if err != nil {
 		return nil, err
 	}
 
-	info := fromVorbisHeader(comments)
+	oggreader, err := oggvorbis.NewReader(file)
+
+	if err != nil {
+		return nil, err
+	}
+
+	info := fromVorbisHeader(oggreader.CommentHeader())
 
 	return &info, nil
 }

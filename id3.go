@@ -1,12 +1,14 @@
 package metadata
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/mikkyang/id3-go"
 	"github.com/mikkyang/id3-go/v1"
 	"github.com/mikkyang/id3-go/v2"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -22,12 +24,10 @@ func ParseID3(file io.Reader) (*Info, error) {
 		return nil, err
 	}
 
-	// TODO: add tracknumber from frames for v2 and from comments for v1
-
 	if v2Tag := v2.ParseTag(fSeeker); v2Tag != nil {
-		info = fromID3Tagger(v2Tag)
+		info = fromID3Tagger(v2Tag, 2)
 	} else if v1Tag := v1.ParseTag(fSeeker); v1Tag != nil {
-		info = fromID3Tagger(v1Tag)
+		info = fromID3Tagger(v1Tag, 1)
 	} else {
 		return nil, ErrUnknownVersion
 	}
@@ -35,22 +35,21 @@ func ParseID3(file io.Reader) (*Info, error) {
 	return &info, nil
 }
 
-func fromID3Tagger(tagger id3.Tagger) Info {
-	fmt.Printf("comment length: %d\n", len(tagger.Comments()[0]))
-
-	b := []byte(tagger.Comments()[0])
-	fmt.Printf("comments: %v", b)
-
+func fromID3Tagger(tagger id3.Tagger, version int) Info {
 	return Info{
-		Title:   tagger.Title(),
-		Artist:  tagger.Artist(),
-		Album:   tagger.Album(),
-		Year:    mapYear(tagger.Year()),
-		Comment: strings.Join(tagger.Comments(), ""), // TODO: check what these comments contain and why are they an array
-		Track:   0,                                    // TODO: test this: The track number is stored in the last two bytes of the comment field. If the comment is 29 or 30 characters long, no track number can be stored.
-		Genre:   tagger.Genre(),
+		Title:   trimNullChar(tagger.Title()),
+		Artist:  trimNullChar(tagger.Artist()),
+		Album:   trimNullChar(tagger.Album()),
+		Year:    mapYear(trimNullChar(tagger.Year())),
+		Comment: trimNullChar(strings.Join(tagger.Comments(), "\n")),
+		Track:   mapTrack(tagger, version),
+		Genre:   trimNullChar(tagger.Genre()),
 		Other:   mapOther(tagger),
 	}
+}
+
+func trimNullChar(s string) string {
+	return strings.TrimSuffix(s, "\000")
 }
 
 func mapYear(ystr string) int {
@@ -61,6 +60,39 @@ func mapYear(ystr string) int {
 	}
 
 	return year
+}
+
+func mapTrack(tagger id3.Tagger, version int) int {
+	var t int
+	var err error
+
+	if version == 2 {
+		// ID3v2 has the tracknumber as a frames field
+		log.Println("ID3v2")
+
+		t, err = strconv.Atoi(strings.Split(tagger.Frame("TRCK").String(), "/")[0])
+	} else if version == 1 {
+		// ID3v1 has the tracknumber in the last byte of the comments
+		log.Println("ID3v1")
+		comments := trimNullChar(tagger.Comments()[0])
+
+		l := len(comments)
+
+		log.Printf("comment length: %d\n", l)
+
+		if bytes.Compare([]byte(comments[l-1:l-1]), make([]byte, 0)) == 0 {
+			t, err = strconv.Atoi(comments[l:l])
+		}
+	} else {
+		// unknown version
+		return 0
+	}
+
+	if err != nil {
+		return 0
+	}
+
+	return t
 }
 
 func mapOther(tagger id3.Tagger) map[string]string {

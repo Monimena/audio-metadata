@@ -8,7 +8,6 @@ import (
 )
 
 func main() {
-
 	flag.Parse()
 
 	audioFile := flag.Arg(0)
@@ -35,5 +34,4 @@ func main() {
 	}
 
 	fmt.Printf("%#v\n", info)
-
 }
